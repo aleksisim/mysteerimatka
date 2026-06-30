@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Matkasuunnitelma</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:#16302C;color:#EFE7D4;font-family:'Cormorant Garamond',Georgia,serif;-webkit-font-smoothing:antialiased}
+  #gate{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:420px;text-align:center}
+  .eyebrow{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:#C79A5A;margin-bottom:22px}
+  h1{font-size:40px;font-weight:500;line-height:1.1;margin-bottom:10px}
+  .sub{font-size:18px;color:#B9C7BE;margin-bottom:34px}
+  form{display:flex;flex-direction:column;gap:14px}
+  input{font-family:'Space Mono',monospace;font-size:15px;letter-spacing:.04em;text-align:center;padding:15px 16px;border-radius:12px;border:1px solid #3C5A52;background:#0F2420;color:#EFE7D4;outline:none}
+  input:focus{border-color:#C79A5A}
+  button{font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;padding:15px 16px;border-radius:12px;border:none;background:#C79A5A;color:#16302C;cursor:pointer;font-weight:700}
+  button:disabled{opacity:.5;cursor:default}
+  .err{min-height:20px;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.02em;color:#E69A8A;margin-top:4px}
+  .hint{font-family:'Space Mono',monospace;font-size:11px;color:#7E9389;margin-top:26px;letter-spacing:.04em}
+  iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff}
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="card">
+    <div class="eyebrow">Yksityinen &middot; vain kutsutuille</div>
+    <h1>Aleksi &amp; Riina</h1>
+    <div class="sub">Tämä matkasuunnitelma on suojattu salasanalla.</div>
+    <form id="f">
+      <input id="pw" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Salasana" aria-label="Salasana">
+      <button id="b" type="submit">Avaa suunnitelma</button>
+      <div class="err" id="e"></div>
+    </form>
+    <div class="hint">Saitko salasanan väärin? Tarkista isot/pienet kirjaimet.</div>
+  </div>
+</div>
+<script>
+(function(){
+  var SALT="qN1mHsaoa86mch7QiNGatQ==", IV="fWfA2cFILWAUVBMt", ITER=250000, PAYLOAD="payload.txt?v=mr13q1t7";
+  function fromB64(s){var bin=atob(s);var a=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return a;}
+  var f=document.getElementById('f'),pw=document.getElementById('pw'),b=document.getElementById('b'),e=document.getElementById('e');
+  var ctCache=null;
+  pw.focus();
+  async function loadCt(){
+    if(ctCache) return ctCache;
+    var r=await fetch(PAYLOAD);
+    if(!r.ok) throw new Error('payload');
+    var txt=(await r.text()).trim();
+    ctCache=fromB64(txt);
+    return ctCache;
+  }
+  f.addEventListener('submit',async function(ev){
+    ev.preventDefault();
+    e.textContent='';b.disabled=true;b.textContent='Avataan…';
+    try{
+      var enc=new TextEncoder();
+      var ct=await loadCt();
+      var km=await crypto.subtle.importKey('raw',enc.encode(pw.value),'PBKDF2',false,['deriveKey']);
+      var key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:fromB64(SALT),iterations:ITER,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+      var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:fromB64(IV)},key,ct);
+      var htmlText=new TextDecoder().decode(pt);
+      var blob=new Blob([htmlText],{type:'text/html'});
+      var url=URL.createObjectURL(blob);
+      var ifr=document.createElement('iframe');
+      ifr.src=url;
+      document.body.innerHTML='';
+      document.title='Roadbook · Aleksi & Riina';
+      document.body.appendChild(ifr);
+    }catch(err){
+      b.disabled=false;b.textContent='Avaa suunnitelma';
+      e.textContent=(err&&err.message==='payload')?'Tiedoston lataus epäonnistui – päivitä sivu.':'Väärä salasana.';
+      if(!(err&&err.message==='payload')){pw.value='';pw.focus();}
+    }
+  });
+})();
+</script>
+</body>
+</html>
